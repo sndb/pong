@@ -17,20 +17,35 @@
 /* Screen */
 const int screenWidth = 720;
 const int screenHeight = 720;
-const Vector2 screenCenter = {screenWidth / 2.0, screenHeight / 2.0};
+const Vector2 center = {screenWidth / 2.0, screenHeight / 2.0};
 
 /* Graphics */
 /* Pallete: https://lospec.com/palette-list/resurrect-64 */
-const Color colorRacket = COLOR(0xffffff),
-            colorRacketHit = COLOR(0xfbff86),
-            colorBall = COLOR(0xfbb954),
-            colorTrail = COLOR(0x9babb2),
-            colorParticleTrail = COLOR(0x9e4539),
-            colorParticleBurst = COLOR(0xfbb954),
-            colorUIText = colorRacket,
-            colorUIFlash = colorRacketHit,
-            colorBackgroundA = COLOR(0x2e222f),
-            colorBackgroundB = COLOR(0x3e3546);
+typedef struct Colorsheme {
+	Color racket;
+	Color racketHit;
+	Color ball;
+	Color trail;
+	Color particleTrail;
+	Color particleBurst;
+	Color uiText;
+	Color uiFlash;
+	Color backgroundA;
+	Color backgroundB;
+} Colorscheme;
+
+const Colorscheme colors = {
+	.racket = COLOR(0xffffff),
+	.racketHit = COLOR(0xfbff86),
+	.ball = COLOR(0xfbb954),
+	.trail = COLOR(0x9babb2),
+	.particleTrail = COLOR(0x9e4539),
+	.particleBurst = COLOR(0xfbb954),
+	.uiText = COLOR(0xffffff),
+	.uiFlash = COLOR(0xfbff86),
+	.backgroundA = COLOR(0x2e222f),
+	.backgroundB = COLOR(0x3e3546),
+};
 
 const float fontSize = 32.0;
 Font font;
@@ -39,24 +54,40 @@ const int backgroundTileSize = 2;
 Texture2D textureBackground;
 
 /* Sounds */
-Sound soundHit;
-Sound soundLoss;
+typedef struct Sounds {
+	Sound hit;
+	Sound loss;
+} Sounds;
+
+Sounds sounds;
 
 /* Racket */
+typedef struct Player {
+	float moves[10];
+	float position;
+	bool ai;
+} Player;
+
+typedef struct Opponent {
+	float position;
+	bool ai;
+} Opponent;
+
 const Vector2 racketSize = {120.0, 10.0};
 const Vector2 racketOffset = {0.0, racketSize.y * 5.0};
 const float racketVelocity = 400.0;
 const float racketBoostFactor = 2.0;
 
-float playerPosition;
-float opponentPosition;
-
-bool playerAI = false;
-bool opponentAI = false;
-
-float recentMoves[10] = {0};
-
 /* Ball */
+typedef struct Ball {
+	Vector2 position;
+	float velocity;
+	float rotation;
+	float spin;
+	int hitCount;
+	double lastHitTime;
+} Ball;
+
 typedef enum Hit {
 	HIT_NONE,
 	HIT_PLAYER,
@@ -65,13 +96,6 @@ typedef enum Hit {
 
 const float ballRadius = 10.0;
 const float ballAcceleration = 25.0;
-
-Vector2 ballPosition;
-float ballVelocity;
-float ballRotation;
-float ballSpin;
-int ballHits;
-double lastBallHit;
 
 /* Trail */
 typedef struct Trail {
@@ -82,8 +106,6 @@ typedef struct Trail {
 const float trailContrast = 0.1;
 const double trailFrequency = 500.0;
 const double trailDuration = 0.1;
-
-Trail trails[128] = {0};
 
 /* Particles */
 typedef struct Particle {
@@ -99,18 +121,21 @@ typedef struct Particle {
 	double duration;
 } Particle;
 
-Particle particles[512] = {0};
-
 /* State */
-typedef enum State {
-	GAME_GOING,
-	GAME_LOST,
-} State;
+typedef enum Status {
+	STATUS_GOING,
+	STATUS_LOST,
+} Status;
 
-State gameState;
-
-/* UI */
-const char *messageText;
+struct {
+	Ball ball;
+	Player player;
+	Opponent opponent;
+	Status status;
+	Particle particles[512];
+	Trail trails[128];
+	const char *message;
+} state;
 
 /* Functions */
 Rectangle GrowRectangle(Rectangle rec, float delta) {
@@ -123,49 +148,53 @@ Rectangle GrowRectangle(Rectangle rec, float delta) {
 
 Rectangle PlayerRectangle(void) {
 	Rectangle rec = {
-	    .x = playerPosition,
-	    .y = screenHeight - racketSize.y - racketOffset.y,
-	    .width = racketSize.x,
-	    .height = racketSize.y,
+		.x = state.player.position,
+		.y = screenHeight - racketSize.y - racketOffset.y,
+		.width = racketSize.x,
+		.height = racketSize.y,
 	};
 	return rec;
 }
 
 Rectangle OpponentRectangle(void) {
 	Rectangle rec = {
-	    .x = opponentPosition,
-	    .y = racketSize.y + racketOffset.y,
-	    .width = racketSize.x,
-	    .height = racketSize.y,
+		.x = state.opponent.position,
+		.y = racketSize.y + racketOffset.y,
+		.width = racketSize.x,
+		.height = racketSize.y,
 	};
 	return rec;
 }
 
 Vector2 BallDirection(void) {
+	float r = state.ball.rotation;
 	Vector2 dir = {
-	    .x = ballRotation >= 90.0 && ballRotation < 270.0 ? -1.0 : +1.0,
-	    .y = ballRotation >= 00.0 && ballRotation < 180.0 ? +1.0 : -1.0,
+		.x = r >= 90.0 && r < 270.0 ? -1.0 : +1.0,
+		.y = r >= 00.0 && r < 180.0 ? +1.0 : -1.0,
 	};
 	return dir;
 }
 
 Hit BallHit(void) {
+	Vector2 pos = state.ball.position;
 	float dy = BallDirection().y;
-	if (CheckCollisionCircleRec(ballPosition, ballRadius, PlayerRectangle()) && dy > 0)
+	if (CheckCollisionCircleRec(pos, ballRadius, PlayerRectangle()) && dy > 0)
 		return HIT_PLAYER;
-	if (CheckCollisionCircleRec(ballPosition, ballRadius, OpponentRectangle()) && dy < 0)
+	if (CheckCollisionCircleRec(pos, ballRadius, OpponentRectangle()) && dy < 0)
 		return HIT_OPPONENT;
 	return HIT_NONE;
 }
 
 bool IsBallHitWall(void) {
+	float x = state.ball.position.x;
 	Vector2 dir = BallDirection();
-	return (ballPosition.x - ballRadius <= racketOffset.x && dir.x < 0)
-	    || (ballPosition.x + ballRadius >= screenWidth - racketOffset.x && dir.x > 0);
+	return (x - ballRadius <= racketOffset.x && dir.x < 0)
+	    || (x + ballRadius >= screenWidth - racketOffset.x && dir.x > 0);
 }
 
 bool IsBallHitRecently(void) {
-	return lastBallHit != 0 && GetTime() - lastBallHit < 0.5;
+	double t = state.ball.lastHitTime;
+	return t != 0 && GetTime() - t < 0.5;
 }
 
 bool ParticleAlive(Particle part) {
@@ -173,15 +202,15 @@ bool ParticleAlive(Particle part) {
 }
 
 void ResetGame(void) {
-	playerPosition = screenWidth / 2.0 - racketSize.x / 2.0;
-	opponentPosition = playerPosition;
-	ballVelocity = 400.0;
-	ballPosition = screenCenter;
-	ballRotation = 70.0;
-	ballSpin = 0.0;
-	ballHits = 0;
-	lastBallHit = 0.0;
-	gameState = GAME_GOING;
+	state.player.position = screenWidth / 2.0 - racketSize.x / 2.0;
+	state.opponent.position = state.player.position;
+	state.ball.position = center;
+	state.ball.velocity = 400.0;
+	state.ball.rotation = 70.0;
+	state.ball.spin = 0.0;
+	state.ball.hitCount = 0;
+	state.ball.lastHitTime = 0.0;
+	state.status = STATUS_GOING;
 }
 
 enum {
@@ -206,18 +235,18 @@ void DrawBackground() {
 }
 
 void DrawUI(void) {
-	const char *text = TextFormat("%d", ballHits);
-	Color color = IsBallHitRecently() ? colorUIFlash : colorUIText;
+	const char *text = TextFormat("%d", state.ball.hitCount);
+	Color color = IsBallHitRecently() ? colors.uiFlash : colors.uiText;
 	Vector2 position = {4, 0};
 	Write(text, position, color, 0);
 
-	if (gameState == GAME_LOST)
-		Write(messageText, screenCenter, colorUIText, WRITE_CENTER);
+	if (state.status == STATUS_LOST)
+		Write(state.message, center, colors.uiText, WRITE_CENTER);
 }
 
 void DrawParticles(void) {
-	for (size_t i = 0; i < LEN(particles); i++) {
-		Particle p = particles[i];
+	for (size_t i = 0; i < LEN(state.particles); i++) {
+		Particle p = state.particles[i];
 		if (!ParticleAlive(p))
 			continue;
 		DrawPoly(p.position, p.type, p.size / 2, p.rotation, p.color);
@@ -226,45 +255,46 @@ void DrawParticles(void) {
 
 void UpdateParticles(void) {
 	float delta = GetFrameTime();
-	for (size_t i = 0; i < LEN(particles); i++) {
-		Particle p = particles[i];
+	for (size_t i = 0; i < LEN(state.particles); i++) {
+		Particle p = state.particles[i];
 		if (!ParticleAlive(p))
 			continue;
 		p.position = Vector2Add(p.position, Vector2Scale(p.velocity, delta));
 		p.velocity = Vector2Add(p.velocity, Vector2Scale(p.velocity, p.acceleration * delta));
 		p.rotation += p.spin * delta;
-		particles[i] = p;
+		state.particles[i] = p;
 	}
 }
 
 void EmitParticle(Particle part) {
 	static size_t lastParticle = 0;
 
-	part.createdAt = GetTime();
-	for (size_t i = 0; i < LEN(particles); i++) {
-		size_t j = (lastParticle + i) % LEN(particles);
-		if (!ParticleAlive(particles[j])) {
-			particles[j] = part;
+	size_t n = LEN(state.particles);
+	for (size_t i = 0; i < n; i++) {
+		size_t j = (lastParticle + i) % n;
+		if (!ParticleAlive(state.particles[j])) {
+			part.createdAt = GetTime();
+			state.particles[j] = part;
 			lastParticle = j;
 			return;
 		}
 	}
 }
 
-void EmitBurst(void) {
+void EmitHitParticles(void) {
 	Vector2 dir = BallDirection();
 	for (int i = 0; i < 10; i++) {
 		Particle part = {
-		    .position = ballPosition,
-		    .velocity.x = dir.x * GetRandomValue(0, 100),
-		    .velocity.y = dir.y * GetRandomValue(0, 100),
-		    .acceleration = -GetRandomValue(1, 16) / 4.0,
-		    .size = ballRadius * (0.4 + GetRandomValue(1, 4) / 10.0),
-		    .duration = GetRandomValue(1, 6) / 2.0,
-		    .rotation = GetRandomValue(0, 359),
-		    .spin = GetRandomValue(-180, 180),
-		    .type = GetRandomValue(3, 5),
-		    .color = ColorBrightness(colorParticleBurst, -0.75 + GetRandomValue(0, 3) / 4.0),
+			.position = state.ball.position,
+			.velocity.x = dir.x * GetRandomValue(0, 100),
+			.velocity.y = dir.y * GetRandomValue(0, 100),
+			.acceleration = -GetRandomValue(1, 16) / 4.0,
+			.size = ballRadius * (0.4 + GetRandomValue(1, 4) / 10.0),
+			.duration = GetRandomValue(1, 6) / 2.0,
+			.rotation = GetRandomValue(0, 359),
+			.spin = GetRandomValue(-180, 180),
+			.type = GetRandomValue(3, 5),
+			.color = ColorBrightness(colors.particleBurst, -0.75 + GetRandomValue(0, 3) / 4.0),
 		};
 		EmitParticle(part);
 	}
@@ -272,33 +302,34 @@ void EmitBurst(void) {
 
 void EmitTrailParticle(void) {
 	Particle part = {
-	    .position.x = ballPosition.x + (GetRandomValue(0, 100) / 50.0 - 1) * ballRadius,
-	    .position.y = ballPosition.y + (GetRandomValue(0, 100) / 50.0 - 1) * ballRadius,
-	    .velocity.x = GetRandomValue(-100, 100),
-	    .velocity.y = GetRandomValue(-100, 100),
-	    .acceleration = -8,
-	    .size = 0.5 * ballRadius + GetRandomValue(1, 100) / 100.0 * 0.5 * ballRadius,
-	    .duration = 0.5,
-	    .rotation = GetRandomValue(0, 359),
-	    .spin = GetRandomValue(-180, 180),
-	    .type = GetRandomValue(3, 5),
-	    .color = colorParticleTrail,
+		.position.x = state.ball.position.x + (GetRandomValue(0, 100) / 50.0 - 1) * ballRadius,
+		.position.y = state.ball.position.y + (GetRandomValue(0, 100) / 50.0 - 1) * ballRadius,
+		.velocity.x = GetRandomValue(-100, 100),
+		.velocity.y = GetRandomValue(-100, 100),
+		.acceleration = -8,
+		.size = 0.5 * ballRadius + GetRandomValue(1, 100) / 100.0 * 0.5 * ballRadius,
+		.duration = 0.5,
+		.rotation = GetRandomValue(0, 359),
+		.spin = GetRandomValue(-180, 180),
+		.type = GetRandomValue(3, 5),
+		.color = colors.particleTrail,
 	};
 	EmitParticle(part);
 }
 
 void DrawBallGlow(void) {
-	DrawCircleGradient(ballPosition.x, ballPosition.y, 3 * ballRadius, Fade(WHITE, 0.4), BLANK);
+	Vector2 pos = state.ball.position;
+	DrawCircleGradient(pos.x, pos.y, 3 * ballRadius, Fade(WHITE, 0.4), BLANK);
 }
 
 void DrawTrail(void) {
 	double now = GetTime();
-	for (size_t i = 0; i < LEN(trails); i++) {
-		Trail t = trails[i];
+	for (size_t i = 0; i < LEN(state.trails); i++) {
+		Trail t = state.trails[i];
 		if (t.createdAt + trailDuration > now) {
 			double left = trailDuration - (now - t.createdAt);
 			float alpha = left / trailDuration * trailContrast;
-			Color color = Fade(colorTrail, alpha);
+			Color color = Fade(colors.trail, alpha);
 			DrawCircleV(t.position, ballRadius, color);
 		}
 	}
@@ -308,10 +339,11 @@ void UpdateTrail(void) {
 	static size_t i = 0;
 
 	double now = GetTime();
-	if (trails[i].createdAt + 1.0 / trailFrequency < now) {
-		trails[i].position = ballPosition;
-		trails[i].createdAt = now;
-		i = (i + 1) % LEN(trails);
+	Trail *t = &state.trails[i];
+	if (t->createdAt + 1.0 / trailFrequency < now) {
+		t->position = state.ball.position;
+		t->createdAt = now;
+		i = (i + 1) % LEN(state.trails);
 	}
 }
 
@@ -321,53 +353,55 @@ void UpdateRecentMoves(float delta) {
 
 	double recentThreshold = 0.1;
 	double now = GetTime();
-	int n = LEN(recentMoves);
+	int n = LEN(state.player.moves);
 	if (lastTime + recentThreshold / n < now) {
 		i = (i + 1) % n;
 		lastTime = now;
-		recentMoves[i] = 0;
+		state.player.moves[i] = 0;
 	}
-	recentMoves[i] += delta;
+	state.player.moves[i] += delta;
 }
 
 float RecentMovesDelta(void) {
 	float result = 0;
-	for (size_t i = 0; i < LEN(recentMoves); i++)
-		result += recentMoves[i];
+	for (size_t i = 0; i < LEN(state.player.moves); i++)
+		result += state.player.moves[i];
 	return result;
 }
 
 void DrawBall(void) {
-	DrawCircle(ballPosition.x, ballPosition.y, ballRadius, colorBall);
+	Vector2 pos = state.ball.position;
+	DrawCircle(pos.x, pos.y, ballRadius, colors.ball);
 }
 
 void UpdateBall(void) {
 	double now = GetTime();
 	float delta = GetFrameTime();
 
-	float v = ballVelocity * delta;
-	ballPosition.x += v * cosf(DEG2RAD * ballRotation);
-	ballPosition.y += v * sinf(DEG2RAD * ballRotation);
-	ballRotation = Wrap(ballRotation + ballSpin * delta, 0.0, 360.0);
+	float v = state.ball.velocity;
+	float r = state.ball.rotation;
+	state.ball.position.x += v * cosf(DEG2RAD * r) * delta;
+	state.ball.position.y += v * sinf(DEG2RAD * r) * delta;
+	state.ball.rotation = Wrap(r + state.ball.spin * delta, 0.0, 360.0);
 
 	Hit hit = BallHit();
 	if (hit) {
-		ballRotation = Wrap(360.0 - ballRotation, 0.0, 360.0);
-		ballVelocity += ballAcceleration;
+		state.ball.rotation = Wrap(360.0 - state.ball.rotation, 0.0, 360.0);
+		state.ball.velocity += ballAcceleration;
 		if (hit == HIT_PLAYER)
-			ballSpin = Clamp(RecentMovesDelta(), -30.0, +30.0);
-		PlaySound(soundHit);
-		EmitBurst();
+			state.ball.spin = Clamp(RecentMovesDelta(), -30.0, +30.0);
+		PlaySound(sounds.hit);
+		EmitHitParticles();
 
-		lastBallHit = now;
-		ballHits++;
+		state.ball.lastHitTime = now;
+		state.ball.hitCount++;
 	}
 
 	if (IsBallHitWall()) {
-		ballRotation = Wrap(180.0 - ballRotation, 0.0, 360.0);
-		ballSpin *= -1;
-		PlaySound(soundHit);
-		EmitBurst();
+		state.ball.rotation = Wrap(180.0 - state.ball.rotation, 0.0, 360.0);
+		state.ball.spin *= -1;
+		PlaySound(sounds.hit);
+		EmitHitParticles();
 	}
 
 	static double lastTrailEmit = 0;
@@ -377,25 +411,20 @@ void UpdateBall(void) {
 	}
 }
 
-void DrawRacket(void) {
-	Rectangle playerRec = PlayerRectangle();
-	Rectangle opponentRec = OpponentRectangle();
-
-	bool playerHit = IsBallHitRecently() && ballHits % 2 == 1;
-	bool opponentHit = IsBallHitRecently() && ballHits % 2 == 0;
-
-	Color playerColor = playerHit ? colorRacketHit : colorRacket;
-	Color opponentColor = opponentHit ? colorRacketHit : colorRacket;
-	Color outlineColor = Fade(colorRacket, 0.2);
-
+void DrawRacket(Rectangle rec, bool hit) {
+	Color color = hit ? colors.racketHit : colors.racket;
 	float outline = 2.0;
 	float roundness = 0.5;
 	int segments = 16;
 
-	DrawRectangleRounded(GrowRectangle(playerRec, outline), roundness, segments, outlineColor);
-	DrawRectangleRounded(GrowRectangle(opponentRec, outline), roundness, segments, outlineColor);
-	DrawRectangleRounded(playerRec, roundness, segments, playerColor);
-	DrawRectangleRounded(opponentRec, roundness, segments, opponentColor);
+	DrawRectangleRounded(GrowRectangle(rec, outline), roundness, segments, Fade(colors.racket, 0.2));
+	DrawRectangleRounded(rec, roundness, segments, color);
+}
+
+void DrawRackets(void) {
+	int hits = state.ball.hitCount;
+	DrawRacket(PlayerRectangle(), IsBallHitRecently() && hits % 2 == 1);
+	DrawRacket(OpponentRectangle(), IsBallHitRecently() && hits % 2 == 0);
 }
 
 float PlayerVelocity(void) {
@@ -411,37 +440,38 @@ float OpponentVelocity(void) {
 }
 
 void UpdateRacket(void) {
-	float oldPosition = playerPosition;
+	float oldPosition = state.player.position;
 
 	float delta = GetFrameTime();
-	playerPosition += GetMouseDelta().x;
-	playerPosition += PlayerVelocity() * delta;
-	opponentPosition += OpponentVelocity() * delta;
+	state.player.position += GetMouseDelta().x;
+	state.player.position += PlayerVelocity() * delta;
+	state.opponent.position += OpponentVelocity() * delta;
 
-	float aiPosition = ballPosition.x - racketSize.x / 2;
-	if (playerAI)
-		playerPosition = aiPosition;
-	if (opponentAI)
-		opponentPosition = aiPosition;
+	float aiPosition = state.ball.position.x - racketSize.x / 2;
+	if (state.player.ai)
+		state.player.position = aiPosition;
+	if (state.opponent.ai)
+		state.opponent.position = aiPosition;
 
 	float minPos = racketOffset.x;
 	float maxPos = screenWidth - racketOffset.x - racketSize.x;
-	playerPosition = Clamp(playerPosition, minPos, maxPos);
-	opponentPosition = Clamp(opponentPosition, minPos, maxPos);
+	state.player.position = Clamp(state.player.position, minPos, maxPos);
+	state.opponent.position = Clamp(state.opponent.position, minPos, maxPos);
 
-	UpdateRecentMoves(playerPosition - oldPosition);
+	UpdateRecentMoves(state.player.position - oldPosition);
 }
 
 void LoseGame(const char *message) {
-	messageText = message;
-	gameState = GAME_LOST;
-	PlaySound(soundLoss);
+	state.message = message;
+	state.status = STATUS_LOST;
+	PlaySound(sounds.loss);
 }
 
 void UpdateState(void) {
-	if (ballPosition.y + ballRadius > screenHeight)
+	float y = state.ball.position.y;
+	if (y + ballRadius > screenHeight)
 		LoseGame("You lost.");
-	if (ballPosition.y - ballRadius < 0)
+	if (y - ballRadius < 0)
 		LoseGame("You won!");
 }
 
@@ -450,16 +480,16 @@ Texture2D GenerateBackground(void) {
 	for (int y = 0; y < screenHeight; y++) {
 		for (int x = 0; x < screenWidth; x++) {
 			int i = x / backgroundTileSize + y / backgroundTileSize;
-			Color color = i % 2 ? colorBackgroundA : colorBackgroundB;
+			Color color = i % 2 ? colors.backgroundA : colors.backgroundB;
 			pixels[y * screenWidth + x] = color;
 		}
 	}
 	Image img = {
-	    .data = pixels,
-	    .width = screenWidth,
-	    .height = screenHeight,
-	    .mipmaps = 1,
-	    .format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8,
+		.data = pixels,
+		.width = screenWidth,
+		.height = screenHeight,
+		.mipmaps = 1,
+		.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8,
 	};
 	Texture2D tex = LoadTextureFromImage(img);
 	UnloadImage(img);
@@ -468,28 +498,28 @@ Texture2D GenerateBackground(void) {
 
 void InitResources(void) {
 	font = LoadFont("font.ttf");
-	soundHit = LoadSound("hit.wav");
-	soundLoss = LoadSound("lost.wav");
+	sounds.hit = LoadSound("hit.wav");
+	sounds.loss = LoadSound("lost.wav");
 	textureBackground = GenerateBackground();
 }
 
 void FreeResources(void) {
 	UnloadFont(font);
-	UnloadSound(soundHit);
-	UnloadSound(soundLoss);
+	UnloadSound(sounds.hit);
+	UnloadSound(sounds.loss);
 	UnloadTexture(textureBackground);
 }
 
 void Update(void) {
-	if (gameState == GAME_GOING) {
+	if (state.status == STATUS_GOING) {
 		UpdateRacket();
 		UpdateTrail();
 		UpdateParticles();
 		UpdateBall();
 		UpdateState();
 	}
-	if (IsKeyPressed(KEY_Q)) opponentAI ^= 1;
-	if (IsKeyPressed(KEY_E)) playerAI ^= 1;
+	if (IsKeyPressed(KEY_Q)) state.opponent.ai ^= 1;
+	if (IsKeyPressed(KEY_E)) state.player.ai ^= 1;
 	if (IsKeyPressed(KEY_R)) ResetGame();
 }
 
@@ -497,7 +527,7 @@ void Draw(void) {
 	BeginDrawing();
 	DrawBackground();
 	DrawUI();
-	DrawRacket();
+	DrawRackets();
 	DrawBallGlow();
 	DrawTrail();
 	DrawParticles();
