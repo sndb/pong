@@ -214,18 +214,18 @@ void ResetGame(void) {
 }
 
 enum {
-	WRITE_CENTER = 1,
-	WRITE_CENTER_X = 2,
-	WRITE_CENTER_Y = 4,
+	WRITE_CENTER_X = 1,
+	WRITE_CENTER_Y = 2,
+	WRITE_CENTER = WRITE_CENTER_X | WRITE_CENTER_Y,
 };
 
 void Write(const char *text, Vector2 position, Color color, unsigned long flags) {
 	float spacing = 0.0;
 	Vector2 size = MeasureTextEx(font, text, fontSize, spacing);
 	Vector2 offset = {0.0, 0.0};
-	if (flags & (WRITE_CENTER | WRITE_CENTER_X))
+	if (flags & WRITE_CENTER_X)
 		offset.x -= size.x / 2.0;
-	if (flags & (WRITE_CENTER | WRITE_CENTER_Y))
+	if (flags & WRITE_CENTER_Y)
 		offset.y -= size.y / 2.0;
 	DrawTextEx(font, text, Vector2Add(position, offset), fontSize, spacing, color);
 }
