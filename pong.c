@@ -373,6 +373,7 @@ float RecentMovesDelta(void) {
 
 void DrawBall(void) {
 	Vector2 pos = state.ball.position;
+	DrawCircle(pos.x, pos.y, ballRadius + 2.0, Fade(colors.ball, 0.2));
 	DrawCircle(pos.x, pos.y, ballRadius, colors.ball);
 }
 
@@ -414,13 +415,10 @@ void UpdateBall(void) {
 }
 
 void DrawRacket(Rectangle rec, bool hit) {
-	Color color = hit ? colors.racketHit : colors.racket;
-	float outline = 2.0;
 	float roundness = 0.5;
 	int segments = 16;
-
-	DrawRectangleRounded(GrowRectangle(rec, outline), roundness, segments, Fade(colors.racket, 0.2));
-	DrawRectangleRounded(rec, roundness, segments, color);
+	DrawRectangleRounded(GrowRectangle(rec, 2.0), roundness, segments, Fade(colors.racket, 0.2));
+	DrawRectangleRounded(rec, roundness, segments, hit ? colors.racketHit : colors.racket);
 }
 
 void DrawRackets(void) {
@@ -531,6 +529,7 @@ void Update(void) {
 	if (IsKeyPressed(KEY_Q)) state.opponent.ai ^= 1;
 	if (IsKeyPressed(KEY_E)) state.player.ai ^= 1;
 	if (IsKeyPressed(KEY_R)) ResetGame();
+	if (IsKeyPressed(KEY_PRINT_SCREEN)) TakeScreenshot("pong.png");
 }
 
 void Draw(void) {
