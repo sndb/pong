@@ -36,13 +36,13 @@ typedef struct Colorsheme {
 
 const Colorscheme colors = {
 	.racket = COLOR(0xffffff),
-	.racketHit = COLOR(0xfbff86),
+	.racketHit = COLOR(0x8fd3ff),
 	.ball = COLOR(0xfbb954),
 	.trail = COLOR(0x9babb2),
 	.particleTrail = COLOR(0x9e4539),
 	.particleBurst = COLOR(0xfbb954),
 	.uiText = COLOR(0xffffff),
-	.uiFlash = COLOR(0xfbff86),
+	.uiFlash = COLOR(0x8fd3ff),
 	.backgroundA = COLOR(0x2e222f),
 	.backgroundB = COLOR(0x3e3546),
 };
@@ -81,6 +81,12 @@ const float racketVelocity = 400.0;
 const float racketBoostFactor = 2.0;
 
 /* Ball */
+typedef enum Hit {
+	HIT_NONE,
+	HIT_PLAYER,
+	HIT_OPPONENT,
+} Hit;
+
 typedef struct Ball {
 	Vector2 position;
 	float velocity;
@@ -88,13 +94,8 @@ typedef struct Ball {
 	float spin;
 	int hitCount;
 	double lastHitTime;
+	Hit lastHit;
 } Ball;
-
-typedef enum Hit {
-	HIT_NONE,
-	HIT_PLAYER,
-	HIT_OPPONENT,
-} Hit;
 
 const float ballRadius = 10.0;
 const float ballAcceleration = 25.0;
@@ -389,6 +390,7 @@ void UpdateBall(void) {
 
 	Hit hit = BallHit();
 	if (hit) {
+		state.ball.lastHit = hit;
 		state.ball.rotation = Wrap(360.0 - state.ball.rotation, 0.0, 360.0);
 		state.ball.velocity += ballAcceleration;
 		if (hit == HIT_PLAYER)
@@ -422,9 +424,10 @@ void DrawRacket(Rectangle rec, bool hit) {
 }
 
 void DrawRackets(void) {
-	int hits = state.ball.hitCount;
-	DrawRacket(PlayerRectangle(), IsBallHitRecently() && hits % 2 == 1);
-	DrawRacket(OpponentRectangle(), IsBallHitRecently() && hits % 2 == 0);
+	bool hit = IsBallHitRecently();
+	Hit side = state.ball.lastHit;
+	DrawRacket(PlayerRectangle(), hit && side == HIT_PLAYER);
+	DrawRacket(OpponentRectangle(), hit && side == HIT_OPPONENT);
 }
 
 float PlayerVelocity(void) {
