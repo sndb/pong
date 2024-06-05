@@ -51,6 +51,8 @@ const float fontSize = 32.0;
 Font font;
 
 const int backgroundTileSize = 2;
+const int separatorHalfWidth = 1;
+const int separatorPitch = 48;
 Texture2D textureBackground;
 
 /* Sounds */
@@ -482,6 +484,14 @@ Texture2D GenerateBackground(void) {
 			int i = x / backgroundTileSize + y / backgroundTileSize;
 			Color color = i % 2 ? colors.backgroundA : colors.backgroundB;
 			pixels[y * screenWidth + x] = color;
+		}
+	}
+	for (int w = -separatorHalfWidth; w <= separatorHalfWidth; w++) {
+		for (int x = 0; x < screenWidth; x++) {
+			if (x / separatorPitch % 2) {
+				int i = (w + center.y) * screenWidth + x;
+				pixels[i] = ColorBrightness(pixels[i], 0.2);
+			}
 		}
 	}
 	Image img = {
