@@ -47,6 +47,7 @@ const Colorscheme colors = {
 	.backgroundB = COLOR(0x3e3546),
 };
 
+const float uiAlpha = 0.8;
 const float fontSize = 32.0;
 Font font;
 
@@ -237,14 +238,21 @@ void DrawBackground() {
 	DrawTexture(textureBackground, 0, 0, WHITE);
 }
 
-void DrawUI(void) {
+void DrawScore(void) {
 	const char *text = TextFormat("%d", state.ball.hitCount);
 	Color color = IsBallHitRecently() ? colors.uiFlash : colors.uiText;
 	Vector2 position = {4, 0};
-	Write(text, position, color, 0);
+	Write(text, position, Fade(color, uiAlpha), 0);
+}
 
+void DrawStatus(void) {
 	if (state.status == STATUS_LOST)
-		Write(state.message, center, colors.uiText, WRITE_CENTER);
+		Write(state.message, center, Fade(colors.uiText, uiAlpha), WRITE_CENTER);
+}
+
+void DrawUI(void) {
+	DrawScore();
+	DrawStatus();
 }
 
 void DrawParticles(void) {
