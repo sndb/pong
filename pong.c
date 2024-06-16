@@ -537,10 +537,14 @@ void Update(void) {
 		UpdateBall();
 		UpdateState();
 	}
-	if (IsKeyPressed(KEY_Q)) state.opponent.ai ^= 1;
-	if (IsKeyPressed(KEY_E)) state.player.ai ^= 1;
-	if (IsKeyPressed(KEY_R)) ResetGame();
-	if (IsKeyPressed(KEY_PRINT_SCREEN)) TakeScreenshot("pong.png");
+	if (IsKeyPressed(KEY_Q))
+		state.opponent.ai ^= 1;
+	if (IsKeyPressed(KEY_E))
+		state.player.ai ^= 1;
+	if (IsKeyPressed(KEY_R))
+		ResetGame();
+	if (IsKeyPressed(KEY_PRINT_SCREEN))
+		TakeScreenshot("pong.png");
 }
 
 void Draw(void) {
